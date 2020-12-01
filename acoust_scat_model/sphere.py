@@ -5,6 +5,7 @@ import scipy.special as special
 class Sphere:
     """Class for predicting sphere scattering.
     """
+
     def __init__(self, material_type='elastic', radius=0.0254, material_params=None):
         MATERIAL_TYPE = {
             'elastic': self._form_function_elastic,
@@ -12,15 +13,34 @@ class Sphere:
             'fluid': self._form_function_fluid,
             'shell': self._form_function_shell,
         }
-        self.sound_speed = 1500   # nominal seawater sound speed [m/s]
-        self.radius = radius      # sphere radius [m]
+        self.radius = radius  # sphere radius [m]
         self.material_type = material_type
-        self.material_params = material_params   # sound speed and density contrast
+        self.material_params = material_params  # sound speed and density contrast
         self._fm_func = MATERIAL_TYPE[self.material_type]  # function to calculate form function
         self.ka = None
         self.theta = None
         self.mode_num_max = None
-        self.TS = None
+        self._fm = None
+        self._TS = None
+
+    @property
+    def fm(self):
+        return self._fm
+
+    @fm.setter
+    def fm(self, val):
+        self._fm = val
+
+    @property
+    def TS(self):
+        if self._TS is None:
+            print('TS or form function has not been calculated yet.')
+        else:
+            return self._TS
+
+    @TS.setter
+    def TS(self, val):
+        self._TS = val
 
     @staticmethod
     def _Pn(n, x):
@@ -96,7 +116,8 @@ class Sphere:
         bn = sin_eta * (1j * cos_eta - sin_eta)
         s = nl * np.expand_dims(pn, 1) * np.expand_dims(bn, 0)
         y = s.sum(axis=2)
-        self._fm = -1j * 2 * y / self.ka
+
+        return -1j * 2 * y / self.ka
 
     def _form_function_rigidfix(self):
         """
@@ -113,7 +134,7 @@ class Sphere:
         Complex form function for spherical shell as a function of scattering angle and ka.
         """
 
-    def get_TS(self, theta=180, ka=None, freq=None, mode_num_max=None):
+    def get_TS(self, theta=None, ka=None, mode_num_max=None):
         """
         Calculate target strength (TS).
 
@@ -124,38 +145,41 @@ class Sphere:
             Default to backscattering direction.
         ka
             ka in medium.
-        freq
-            frequency. Only one of ``ka`` and ``freq`` should be specified.
-            If only ``freq`` is given the underlying ka values will be calculated
-            based on the initialized sphere radius.
         mode_num_max
             maximum number of modes to be calculated.
             Default to None and the calculation will use ``round(max(ka1))+10``.
         """
-        # TODO: need to work out the logic so that self._f is only computed once
-        #  when self.TS is called without any input arguments
-        # ka
-        if (ka is not None) and (freq is not None):
-            raise ValueError('Only one of ka and freq should be specified!')
-        elif ka is not None:
-            self.ka = ka
-        elif freq is not None:
-            self.ka = 2 * np.pi * freq / self.sound_speed
+        # If no input argument is given, use previously computed form function
+        if (ka is None) and (theta is None) and (mode_num_max is None):
+            if self._fm is None:
+                raise ValueError('Need to compute the scattering function at least once '
+                                 'by calling ._get_TS(theta, ka, ...).')
+            else:   # use form function computed previously
+                self.TS = 20 * np.log10(np.abs(self._fm) / 2 * self.radius)
+
+        # If one of the input arguments is given, recalculate self.fm
         else:
-            raise ValueError('At least one of ka and freq should be specified!')
+            if ka is not None:
+                self.ka = ka
+            else:
+                self.ka = np.linspace(0, 30, 1000)
+                print('Use default ka=np.linspace(0, 30, 1000).')
 
-        # Scattering angle
-        self.theta = theta
+            if theta is not None:
+                self.theta = theta
+            else:
+                self.theta = 180
+                print('Use default theta=180 deg -- backscattering direction.')
 
-        # Maximum mode number
-        if mode_num_max is None:
-            self.mode_num_max = np.ceil(self.ka.max()).astype('int')+10
-        else:
-            self.mode_num_max = mode_num_max
+            if mode_num_max is None:
+                self.mode_num_max = np.ceil(self.ka.max()).astype('int') + 10
+            else:
+                self.mode_num_max = mode_num_max
 
-        # compute form function and return self._fm
-        self._fm_func()
+            # Recalculate form function
+            self.fm = self._fm_func()
 
-        self.TS = 20 * np.log10(np.abs(self._fm) / 2 * self.radius)
+            # Assign TS
+            self.TS = 20 * np.log10(np.abs(self.fm) / 2 * self.radius)
 
         return self.TS
