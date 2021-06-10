@@ -129,7 +129,14 @@ class Sphere:
         Complex form function for fluid sphere as a function of scattering angle and ka.
         """
         ka1 = self.ka
-        ka2 = ka1 / self.material_params['h']
+        if 'h' in self.material_params:
+            h = self.material_params['h']
+        elif 'hc' in self.material_params:
+            h = self.material_params['hc']
+        else:
+            raise ValueError('Sound speed contrast not found in inputs!')
+        ka2 = ka1 / h
+        g = self.material_params['g']
         n = np.arange(self.mode_num_max)
         pn1 = self._Pn(n, np.cos(self.theta / 180 * np.pi))
         nl = 2 * n + 1
@@ -142,8 +149,8 @@ class Sphere:
         jn2 = special.spherical_jn(np.expand_dims(n, 0), np.expand_dims(ka2, 1))
         djn2 = special.spherical_jn(np.expand_dims(n, 0), np.expand_dims(ka2, 1), derivative=True)
 
-        term1 = djn2 * yn1 / (jn2 * djn1) - self.material_params['g'] * self.material_params['h'] * dyn1 / djn1
-        term2 = djn2 * jn1 / (jn2 * djn1) - self.material_params['g'] * self.material_params['h']
+        term1 = djn2 * yn1 / (jn2 * djn1) - g * h * dyn1 / djn1
+        term2 = djn2 * jn1 / (jn2 * djn1) - g * h
         cn = term1 / term2
         bn = -1 / (1 + 1j * cn)
 
