@@ -128,6 +128,29 @@ class Sphere:
         """
         Complex form function for fluid sphere as a function of scattering angle and ka.
         """
+        ka1 = self.ka
+        ka2 = ka1 / self.material_params['h']
+        n = np.arange(self.mode_num_max)
+        pn1 = self._Pn(n, np.cos(self.theta / 180 * np.pi))
+        nl = 2 * n + 1
+
+        jn1 = special.spherical_jn(np.expand_dims(n, 0), np.expand_dims(ka1, 1))
+        yn1 = special.spherical_yn(np.expand_dims(n, 0), np.expand_dims(ka1, 1))
+        djn1 = special.spherical_jn(np.expand_dims(n, 0), np.expand_dims(ka1, 1), derivative=True)
+        dyn1 = special.spherical_yn(np.expand_dims(n, 0), np.expand_dims(ka1, 1), derivative=True)
+
+        jn2 = special.spherical_jn(np.expand_dims(n, 0), np.expand_dims(ka2, 1))
+        djn2 = special.spherical_jn(np.expand_dims(n, 0), np.expand_dims(ka2, 1), derivative=True)
+
+        term1 = djn2 * yn1 / (jn2 * djn1) - self.material_params['g'] * self.material_params['h'] * dyn1 / djn1
+        term2 = djn2 * jn1 / (jn2 * djn1) - self.material_params['g'] * self.material_params['h']
+        cn = term1 / term2
+        bn = -1 / (1 + 1j * cn)
+
+        s = nl * np.expand_dims(pn1, 1) * np.expand_dims(bn, 0)
+        y = s.sum(axis=2)
+
+        return -1j * 2 * y / self.ka
 
     def _form_function_shell(self):
         """
